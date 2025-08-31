@@ -78,7 +78,7 @@ const Lesson = ({ chapterId }) => {
 
   const handleChallengeSubmit = async () => {
     try {
-      const res = await fetch("http://localhost:3001/run-code", {
+      const res = await fetch("https://bugblitz-grl6.vercel.app/run-code", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sourceCode: challengeCode, language: 'javascript' }),

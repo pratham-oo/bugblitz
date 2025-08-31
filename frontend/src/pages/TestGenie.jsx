@@ -27,7 +27,7 @@ const TestGenie = () => {
       
       const fullPrompt = `${promptInstruction}\n\n${input}`;
 
-      const res = await fetch("http://localhost:3001/generate-testcases", {
+      const res = await fetch("https://bugblitz-grl6.vercel.app/generate-testcases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: fullPrompt }),
