@@ -147,7 +147,7 @@ export default function BugChallenge() {
     setAttempted(true);
 
     try {
-      const res = await fetch("http://localhost:3001/submit-fix", {
+      const res = await fetch("https://bugblitz-grl6.vercel.app/submit-fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
