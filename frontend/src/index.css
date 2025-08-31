@@ -1,0 +1,6 @@
+@import "tailwindcss";
+body {
+  background-color: #111827; /* This is the dark gray color (bg-gray-900) we use everywhere */
+  color: white; /* Let's also set the default text color to white */
+}
+
