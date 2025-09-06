@@ -15,11 +15,10 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-  origin: 'https://bugblitz-ai.vercel.app',
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-
 app.use(express.json());
 const upload = multer({ dest: "uploads/" });
 
