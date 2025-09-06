@@ -9,16 +9,12 @@ import fs from "fs-extra";
 import path from "path";
 import fetch from "node-fetch";
 
-import { dummyChallenges } from "./dummyChallenges.js";
+import { dummyChallenges } from "../../src/data/dummyChallenges.js";
 
 dotenv.config();
 
 const app = express();
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors());
 app.use(express.json());
 const upload = multer({ dest: "uploads/" });
 
@@ -54,8 +50,15 @@ async function runJudge0({ source, stdin = "", language }) {
       }),
     }
   );
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Judge0 API Error: ${resp.status} ${resp.statusText} - ${text}`);
+  }
+
   return resp.json();
 }
+
 
 const clean = (s) => (s || "").trim().replace(/\r\n/g, "\n");
 
@@ -140,13 +143,8 @@ app.post("/run-code", async (req, res) => {
   }
 });
 
-app.get('/', () =>{
-  return res.status(2000).json({message : "Server is running"});
-})
-
 // ----------------- Test Case Generator -----------------
 app.post("/generate-testcases", async (req, res) => {
-  console.log("inside");
   const { prompt } = req.body;
   if (!prompt) {
     return res.status(400).json({ error: "A prompt is required." });
