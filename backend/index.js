@@ -14,7 +14,11 @@ import { dummyChallenges } from "./dummyChallenges.js";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 const upload = multer({ dest: "uploads/" });
 
@@ -135,6 +139,10 @@ app.post("/run-code", async (req, res) => {
     res.status(500).json({ error: "Error during code execution." });
   }
 });
+
+app.get('/', () =>{
+  return res.status(2000).json({message : "Server is running"});
+})
 
 // ----------------- Test Case Generator -----------------
 app.post("/generate-testcases", async (req, res) => {

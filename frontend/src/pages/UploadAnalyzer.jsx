@@ -19,7 +19,7 @@ const UploadAnalyzer = () => {
     formData.append("zipFile", file); // key should match multer field name
 
     try {
-      const res = await fetch("https://bugblitz-grl6.vercel.app/upload-analyze", {
+      const res = await fetch("https://bugblitz.onrender.com/upload-analyze", {
         method: "POST",
         body: formData,
       });

@@ -46,7 +46,7 @@ const AutoBug = () => {
         setLoading(false);
         return;
       }
-      endpoint = "https://bugblitz-grl6.vercel.app/explain-bug";
+      endpoint = "https://bugblitz.onrender.com/explain-bug";
       headers = { "Content-Type": "application/json" };
       body = JSON.stringify({ code });
     } else if (inputType === 'upload') {
@@ -57,7 +57,7 @@ const AutoBug = () => {
       }
       const formData = new FormData();
       formData.append('zipFile', file);
-      endpoint = "https://bugblitz-grl6.vercel.app/upload-analyze";
+      endpoint = "https://bugblitz.onrender.com/upload-analyze";
       body = formData;
     }
 
@@ -160,7 +160,7 @@ const AutoBug = () => {
     const fullCodeToRun = code + harness;
 
     try {
-        const res = await fetch("https://bugblitz-grl6.vercel.app/run-code", {
+        const res = await fetch("https://bugblitz.onrender.com/run-code", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

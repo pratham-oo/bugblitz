@@ -90,7 +90,7 @@ const GitHubAnalyzer = () => {
     setPathHistory(['root']);
 
     try {
-      const res = await fetch("https://bugblitz-grl6.vercel.app/analyze-repo", {
+      const res = await fetch("https://bugblitz.onrender.com/analyze-repo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repoUrl }),
