@@ -25,7 +25,7 @@ const createGraphElements = (flatTree, currentPath = 'root') => {
     nodes.push({ 
         id: currentPath, 
         data: { label: parentNodeLabel }, 
-        position: { x: 400, y: 50 }, // Start parent node at a predictable top-center position
+        position: { x: 400, y: 50 },
         type: 'input',
         style: {
             background: '#1f2937', color: '#f59e0b', border: '2px solid #f59e0b',
@@ -43,7 +43,7 @@ const createGraphElements = (flatTree, currentPath = 'root') => {
                 label: nodeLabel, 
                 type: item.type === 'tree' ? 'folder' : 'file'
             },
-            position: { x: Math.random() * 800, y: Math.random() * 400 + 200 }, // Start children below parent
+            position: { x: Math.random() * 800, y: Math.random() * 400 + 200 },
             type: 'default',
             style: {
                 background: '#111827',
@@ -96,17 +96,24 @@ const GitHubAnalyzer = () => {
         body: JSON.stringify({ repoUrl }),
       });
 
-      const data = await res.json();
+      const text = await res.text(); // Read raw response
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Invalid JSON response from server: " + text);
+      }
+
       if (res.ok) {
-        setAnalysisResult(data.analysisResult);
+        setAnalysisResult(data.analysisResult || "✅ Analysis complete (no text returned).");
         if (data.fileTree) {
             setFullFileTree(data.fileTree);
         }
       } else {
-        setAnalysisResult("❌ Error: " + data.error);
+        setAnalysisResult("❌ Server Error: " + (data.error || "Something went wrong"));
       }
     } catch (err) {
-      setAnalysisResult("⚠️ Network error: " + err.message);
+      setAnalysisResult("⚠️ Network/Parsing error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -138,8 +145,8 @@ const GitHubAnalyzer = () => {
         simulationRef.current = d3.forceSimulation(initialNodes)
             .force("link", d3.forceLink(initialEdges).id(d => d.id).distance(150).strength(0.8))
             .force("charge", d3.forceManyBody().strength(-800))
-            .force("x", d3.forceX(window.innerWidth / 4).strength(0.03)) // Center horizontally
-            .force("y", d3.forceY(window.innerHeight / 4).strength(0.03)); // Center vertically
+            .force("x", d3.forceX(window.innerWidth / 4).strength(0.03))
+            .force("y", d3.forceY(window.innerHeight / 4).strength(0.03));
 
         simulationRef.current.on("tick", () => {
             setNodes((currentNodes) =>

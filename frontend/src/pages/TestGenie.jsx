@@ -32,7 +32,7 @@ const TestGenie = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: fullPrompt }),
       });
-
+      
       const data = await res.json();
       if (res.ok) {
         setOutput(data.result);

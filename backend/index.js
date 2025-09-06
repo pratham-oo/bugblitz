@@ -1,4 +1,4 @@
-// index.js - Full Backend for Bug Arena (Vercel Ready)
+// index.js - Full Backend for Bug Arena
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -8,25 +8,20 @@ import unzipper from "unzipper";
 import fs from "fs-extra";
 import path from "path";
 import fetch from "node-fetch";
+
 import { dummyChallenges } from "./dummyChallenges.js";
 
-// IMPORTANT: Vercel needs the path to be relative to the API route
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-const upload = multer({ dest: "/tmp/uploads" }); // Use /tmp for Vercel's writable directory
+const upload = multer({ dest: "uploads/" });
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
 });
-
-const GITHUB_API_HEADERS = {
-    "Authorization": `token ${process.env.GITHUB_TOKEN}`,
-    "Accept": "application/vnd.github.v3+json",
-};
 
 const judge0LanguageMap = {
   python: 71,
@@ -38,6 +33,7 @@ const judge0LanguageMap = {
 async function runJudge0({ source, stdin = "", language }) {
   const languageId = judge0LanguageMap[language.toLowerCase()];
   if (!languageId) throw new Error("Unsupported language");
+
   const resp = await fetch(
     "https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true&fields=status,stdout,stderr,time,memory",
     {
@@ -59,44 +55,88 @@ async function runJudge0({ source, stdin = "", language }) {
 
 const clean = (s) => (s || "").trim().replace(/\r\n/g, "\n");
 
+// ----------------- 🔥 GitHub Repo Tree Fetcher -----------------
 async function getRepoTree(owner, repo) {
   try {
-    const repoInfoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: GITHUB_API_HEADERS });
+    const GITHUB_API_HEADERS = {
+      Authorization: `token ${process.env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github.v3+json",
+    };
+
+    // 1. Get default branch
+    const repoInfoRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      { headers: GITHUB_API_HEADERS }
+    );
     if (!repoInfoRes.ok) {
-        throw new Error(`Could not fetch repo info: ${repoInfoRes.statusText}`);
+      throw new Error(`Could not fetch repo info: ${repoInfoRes.statusText}`);
     }
     const repoInfo = await repoInfoRes.json();
     const defaultBranch = repoInfo.default_branch;
-    
-    const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`, { headers: GITHUB_API_HEADERS });
+
+    // 2. Get latest commit SHA for that branch
+    const branchRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/branches/${defaultBranch}`,
+      { headers: GITHUB_API_HEADERS }
+    );
+    if (!branchRes.ok) {
+      throw new Error(
+        `Could not fetch branch info: ${branchRes.statusText}`
+      );
+    }
+    const branchInfo = await branchRes.json();
+    const commitSha = branchInfo.commit?.sha;
+    if (!commitSha) throw new Error("Could not resolve commit SHA");
+
+    // 3. Get the tree recursively
+    const treeRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/trees/${commitSha}?recursive=1`,
+      { headers: GITHUB_API_HEADERS }
+    );
     if (!treeRes.ok) {
       throw new Error(`Could not fetch repo tree: ${treeRes.statusText}`);
     }
     const data = await treeRes.json();
 
-    if(data.truncated) {
-        console.warn(`Warning: Repository ${owner}/${repo} is very large and the file tree was truncated.`);
+    if (data.truncated) {
+      console.warn(
+        `⚠️ Warning: Repository ${owner}/${repo} is very large and tree was truncated.`
+      );
     }
 
     return data.tree || [];
   } catch (error) {
-    console.error("Failed to fetch repo tree:", error);
+    console.error("❌ Failed to fetch repo tree:", error);
     return null;
   }
 }
+// ----------------------------------------------------------------
 
 app.post("/run-code", async (req, res) => {
   const { sourceCode, language, stdin } = req.body;
-  if (!sourceCode || !language) { return res.status(400).json({ error: "sourceCode and language are required." }); }
+  if (!sourceCode || !language) {
+    return res.status(400).json({ error: "sourceCode and language are required." });
+  }
   try {
-    const resultData = await runJudge0({ source: sourceCode, stdin: stdin || "", language });
-    res.json({ status: resultData.status?.description, stdout: resultData.stdout, stderr: resultData.stderr, time: resultData.time, memory: resultData.memory });
+    const resultData = await runJudge0({
+      source: sourceCode,
+      stdin: stdin || "",
+      language,
+    });
+    res.json({
+      status: resultData.status?.description,
+      stdout: resultData.stdout,
+      stderr: resultData.stderr,
+      time: resultData.time,
+      memory: resultData.memory,
+    });
   } catch (error) {
     console.error("Judge0 execution error:", error);
     res.status(500).json({ error: "Error during code execution." });
   }
 });
 
+// ----------------- Test Case Generator -----------------
 app.post("/generate-testcases", async (req, res) => {
   const { prompt } = req.body;
   if (!prompt) {
@@ -113,6 +153,7 @@ app.post("/generate-testcases", async (req, res) => {
   }
 });
 
+// ----------------- Auto Bug Explainer -----------------
 app.post("/explain-bug", async (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: "Code is required." });
@@ -123,9 +164,10 @@ app.post("/explain-bug", async (req, res) => {
       for (const lang in challenge.variants) {
         for (const buggyCode of challenge.variants[lang]) {
           if (clean(buggyCode) === normalizedInputCode) {
-            return res.json({ 
+            return res.json({
               isCheating: true,
-              message: "### 🚨 ALERT! 🚨\nAha! Trying to use our own tools against us, debugger? Clever... but not clever enough. Solve this one in the Arena yourself! 😉" 
+              message:
+                "### 🚨 ALERT! 🚨\nAha! Trying to use our own tools against us, debugger? Clever... but not clever enough. Solve this one in the Arena yourself! 😉",
             });
           }
         }
@@ -133,54 +175,91 @@ app.post("/explain-bug", async (req, res) => {
     }
   }
 
-  const prompt = `You are an expert software tester and code reviewer...`; // Full prompt
+  const prompt = `You are an expert software tester and code reviewer. Analyze this code and respond IN MARKDOWN format with the following exact headers:
+### Bug Severity
+(Classify as: Critical, High, Medium, Low, or Typo)
+### Root Cause Category
+(Classify as: Logic Error, Off-by-One Error, Null Pointer, Type Mismatch, Syntax Error, or other relevant category)
+### Bug Explanation
+<Detailed explanation>
+### Suggested Fix
+<How to fix>
+### Final Corrected Code
+\`\`\`
+${code}
+\`\`\``;
 
   try {
     const completion = await openai.chat.completions.create({
       model: "mistralai/mistral-7b-instruct",
       messages: [{ role: "user", content: prompt }],
     });
-    res.json({ result: completion.choices[0]?.message?.content || "No response." });
+    res.json({
+      result: completion.choices[0]?.message?.content || "No response.",
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// ----------------- 🔥 GitHub Analyzer -----------------
 app.post("/analyze-repo", async (req, res) => {
   const { repoUrl } = req.body;
-  if (!repoUrl) return res.status(400).json({ error: "Repository URL is required." });
+  if (!repoUrl) {
+    return res.status(400).json({ error: "Repository URL is required." });
+  }
 
   const urlMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!urlMatch) { return res.status(400).json({ error: "Invalid GitHub repository URL." }); }
+  if (!urlMatch) {
+    return res.status(400).json({ error: "Invalid GitHub repository URL." });
+  }
   const owner = urlMatch[1];
-  const repo = urlMatch[2].replace('.git', '');
+  const repo = urlMatch[2].replace(".git", "");
 
   try {
     const flatTree = await getRepoTree(owner, repo);
     if (flatTree === null) {
-        return res.status(500).json({ error: "Could not fetch repository data from GitHub. The repository might be private, deleted, or the URL may have a typo."});
+      return res.status(500).json({
+        error:
+          "Could not fetch repository data from GitHub. Repo might be private, deleted, or the URL has a typo.",
+      });
     }
 
-    const fileTreeTextForAI = flatTree.map(item => `${item.path}`).join('\n');
-    
-    const prompt = `You are a 10x senior developer...`; // Full prompt
+    const fileTreeTextForAI = flatTree.map((item) => `${item.path}`).join("\n");
+
+    const prompt = `You are a 10x senior developer. Analyze this GitHub repository. Respond IN MARKDOWN with these exact headers: 
+### 🚀 Project Summary
+### 🛠️ Tech Stack Analysis
+### 📁 Key File Explanations
+### 🐞 Potential Bugs & Improvements
+### ⭐ Getting Started for Beginners
+
+Here is the file tree for context:
+${fileTreeTextForAI}
+
+Repository: ${repoUrl}`;
 
     const completion = await openai.chat.completions.create({
       model: "mistralai/mistral-7b-instruct",
       messages: [{ role: "user", content: prompt }],
     });
 
-    const aiAnalysis = completion.choices[0]?.message?.content || "AI analysis failed.";
-    
-    res.json({
-        fileTree: flatTree,
-        analysisResult: aiAnalysis,
-    });
+    const aiAnalysis =
+      completion.choices[0]?.message?.content || "AI analysis failed.";
 
+    res.json({
+      fileTree: flatTree,
+      analysisResult: aiAnalysis,
+    });
   } catch (error) {
+    console.error("❌ analyze-repo error:", error);
     res.status(500).json({ error: error.message });
   }
 });
+// ----------------------------------------------------------------
+
+// (upload-analyze + submit-fix code stays same as yours…)
+
 
 app.post("/upload-analyze", upload.single("zipFile"), async (req, res) => {
   const zipPath = req.file?.path;
@@ -188,7 +267,33 @@ app.post("/upload-analyze", upload.single("zipFile"), async (req, res) => {
   const extractPath = `/tmp/extracted/${Date.now()}`;
   await fs.ensureDir(extractPath);
   try {
-    // ... Full logic
+    await fs.createReadStream(zipPath).pipe(unzipper.Extract({ path: extractPath })).promise();
+    const walk = async (dir) => {
+      let files = [];
+      for (const file of await fs.readdir(dir)) {
+        const fullPath = path.join(dir, file);
+        const stat = await fs.stat(fullPath);
+        if (stat.isDirectory()) files = files.concat(await walk(fullPath));
+        else files.push(fullPath);
+      }
+      return files;
+    };
+    const allFiles = await walk(extractPath);
+    let codeData = "";
+    for (const fullPath of allFiles) {
+      const ext = path.extname(fullPath);
+      if (/\.(js|ts|jsx|tsx|py|c|cpp|java)$/.test(ext)) {
+        const content = await fs.readFile(fullPath, "utf8");
+        codeData += `\n\n--- File: ${fullPath.replace(extractPath, "")} ---\n${content}`;
+      }
+    }
+    if (!codeData.trim()) return res.status(400).json({ error: "No code files found." });
+    const prompt = `Analyze this uploaded project:\n${codeData}`;
+    const completion = await openai.chat.completions.create({
+      model: "mistralai/mistral-7b-instruct",
+      messages: [{ role: "user", content: prompt }],
+    });
+    res.json({ result: completion.choices[0]?.message?.content || "No AI response." });
   } catch (error) {
     res.status(500).json({ error: error.message });
   } finally {
@@ -267,6 +372,5 @@ app.post("/submit-fix", async (req, res) => {
   }
 });
 
-
-const PORT = 3001
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
